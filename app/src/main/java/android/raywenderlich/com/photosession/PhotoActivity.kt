@@ -205,11 +205,11 @@ class PhotoActivity : AppCompatActivity() {
     createImagePopup(takenImage.drawable) { removeImagePopup() }
         .let {
           imagePopupView = it
-          addImagePopupViewWithBlurToRoot(it)
+          addImagePopupViewToRoot(it)
         }
   }
 
-  private fun addImagePopupViewWithBlurToRoot(imagePopupView: ImagePopupView) {
+  private fun addImagePopupViewToRoot(imagePopupView: ImagePopupView) {
     rootView.addView(imagePopupView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
   }
 
