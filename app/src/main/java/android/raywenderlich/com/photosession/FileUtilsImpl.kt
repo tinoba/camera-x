@@ -27,49 +27,31 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
 package android.raywenderlich.com.photosession
 
-import android.content.Intent
-import android.os.Bundle
-import android.os.Handler
-import androidx.appcompat.app.AppCompatActivity
-import android.view.Window
-import android.view.WindowManager
+import android.os.Environment
+import java.io.File
 
-class SplashActivity : AppCompatActivity() {
+class FileUtilsImpl : FileUtils {
 
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+  companion object {
 
-    makeFullScreen()
-
-    setContentView(R.layout.activity_splash)
-
-    // Using a handler to delay loading the PhotoActivity
-    Handler().postDelayed({
-
-      // Start activity
-      startActivity(Intent(this, PhotoActivity::class.java))
-
-      // Animate the loading of new activity
-      overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-
-      // Close this activity
-      finish()
-
-    }, 2000)
+    private const val IMAGE_PREFIX = "Image_"
+    private const val JAG_SUFFIX = ".jpg"
+    private const val FOLDER_NAME = "Photo_session"
   }
 
-  private fun makeFullScreen() {
-    // Remove Title
-    requestWindowFeature(Window.FEATURE_NO_TITLE)
-
-    // Make Fullscreen
-    window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-        WindowManager.LayoutParams.FLAG_FULLSCREEN)
-
-    // Hide the toolbar
-    supportActionBar?.hide()
+  override fun createDirectoryIfNotExist() {
+    val folder = File(Environment.getExternalStorageDirectory().toString() +
+        File.separator + Environment.DIRECTORY_PICTURES + File.separator + FOLDER_NAME)
+    if (!folder.exists()) {
+      folder.mkdirs()
+    }
   }
+
+  override fun createFile() = File(
+      Environment.getExternalStorageDirectory().toString() +
+          File.separator + Environment.DIRECTORY_PICTURES + File.separator +
+          FOLDER_NAME + File.separator + IMAGE_PREFIX + System.currentTimeMillis() + JAG_SUFFIX
+  )
 }

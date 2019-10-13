@@ -27,49 +27,25 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-
 package android.raywenderlich.com.photosession
 
-import android.content.Intent
-import android.os.Bundle
-import android.os.Handler
-import androidx.appcompat.app.AppCompatActivity
-import android.view.Window
-import android.view.WindowManager
+enum class ExtensionFeature(val position: Int) {
 
-class SplashActivity : AppCompatActivity() {
+  NONE(0),
+  BOKEH(1),
+  HDR(2),
+  NIGHT_MODE(3);
 
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+  companion object {
 
-    makeFullScreen()
-
-    setContentView(R.layout.activity_splash)
-
-    // Using a handler to delay loading the PhotoActivity
-    Handler().postDelayed({
-
-      // Start activity
-      startActivity(Intent(this, PhotoActivity::class.java))
-
-      // Animate the loading of new activity
-      overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
-
-      // Close this activity
-      finish()
-
-    }, 2000)
-  }
-
-  private fun makeFullScreen() {
-    // Remove Title
-    requestWindowFeature(Window.FEATURE_NO_TITLE)
-
-    // Make Fullscreen
-    window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-        WindowManager.LayoutParams.FLAG_FULLSCREEN)
-
-    // Hide the toolbar
-    supportActionBar?.hide()
+    fun fromPosition(position: Int) : ExtensionFeature {
+      return when (position) {
+        NONE.position -> NONE
+        BOKEH.position -> BOKEH
+        HDR.position -> HDR
+        NIGHT_MODE.position -> NIGHT_MODE
+        else -> NONE
+      }
+    }
   }
 }
