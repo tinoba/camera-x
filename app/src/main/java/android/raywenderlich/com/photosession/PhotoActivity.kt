@@ -38,25 +38,25 @@ import android.graphics.Matrix
 import android.graphics.drawable.Drawable
 import android.media.Image
 import android.os.Bundle
-import android.raywenderlich.com.photosession.ExtensionFeature.*
 import android.raywenderlich.com.photosession.ImagePopupView.Companion.ALPHA_TRANSPARENT
 import android.raywenderlich.com.photosession.ImagePopupView.Companion.FADING_ANIMATION_DURATION
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
-import android.widget.AdapterView.OnItemSelectedListener
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.extensions.BokehImageCaptureExtender
 import androidx.camera.extensions.HdrImageCaptureExtender
+import androidx.camera.extensions.ImageCaptureExtender
 import androidx.camera.extensions.NightImageCaptureExtender
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.android.synthetic.main.activity_photo.*
 import java.io.File
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 class PhotoActivity : AppCompatActivity() {
@@ -71,11 +71,11 @@ class PhotoActivity : AppCompatActivity() {
   }
 
   private val fileUtils: FileUtils by lazy { FileUtilsImpl() }
+  private val executor: Executor by lazy { Executors.newSingleThreadExecutor() }
 
-  private var extensionFeature = NONE
-  private var lensFacing = CameraX.LensFacing.BACK
   private var imageCapture: ImageCapture? = null
   private var imagePopupView: ImagePopupView? = null
+  private var lensFacing = CameraX.LensFacing.BACK
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -85,27 +85,26 @@ class PhotoActivity : AppCompatActivity() {
   }
 
   private fun setClickListeners() {
+    toggleCameraLens.setOnClickListener { toggleFrontBackCamera() }
     previewView.setOnClickListener { takePicture() }
     takenImage.setOnLongClickListener {
       showImagePopup()
       return@setOnLongClickListener true
     }
-    toggleCameraLens.setOnClickListener { toggleFrontBackCamera() }
-    extensionFeatures.onItemSelectedListener = object : OnItemSelectedListener {
+
+    extensionFeatures.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
       override fun onItemSelected(
           parentView: AdapterView<*>,
           selectedItemView: View,
           position: Int,
           id: Long
       ) {
-        extensionFeature = ExtensionFeature.fromPosition(position)
-        if (extensionFeature != NONE) {
+        if (ExtensionFeature.fromPosition(position) != ExtensionFeature.NONE) {
           previewView.post { startCamera() }
         }
       }
 
-      override fun onNothingSelected(parentView: AdapterView<*>) {
-      }
+      override fun onNothingSelected(parentView: AdapterView<*>) {}
     }
   }
 
@@ -130,7 +129,7 @@ class PhotoActivity : AppCompatActivity() {
     fileUtils.createDirectoryIfNotExist()
     val file = fileUtils.createFile()
 
-    imageCapture?.takePicture(file, getMetadata(), Executors.newSingleThreadExecutor()
+    imageCapture?.takePicture(file, getMetadata(), executor
         , object : ImageCapture.OnImageSavedListener {
       override fun onImageSaved(file: File) {
         runOnUiThread {
@@ -154,7 +153,7 @@ class PhotoActivity : AppCompatActivity() {
   }
 
   private fun savePictureToMemory() {
-    imageCapture?.takePicture(Executors.newSingleThreadExecutor()
+    imageCapture?.takePicture(executor
         , object : ImageCapture.OnImageCapturedListener() {
       override fun onError(
           error: ImageCapture.ImageCaptureError,
@@ -256,7 +255,6 @@ class PhotoActivity : AppCompatActivity() {
 
   private fun createPreviewUseCase(): Preview {
     val previewConfig = PreviewConfig.Builder().apply {
-      setTargetAspectRatio(AspectRatio.RATIO_16_9)
       setLensFacing(lensFacing)
       setTargetRotation(previewView.display.rotation)
 
@@ -269,7 +267,6 @@ class PhotoActivity : AppCompatActivity() {
     val imageCaptureConfig = ImageCaptureConfig.Builder()
         .apply {
           setLensFacing(lensFacing)
-          setTargetAspectRatio(AspectRatio.RATIO_16_9)
           setTargetRotation(previewView.display.rotation)
           setCaptureMode(ImageCapture.CaptureMode.MAX_QUALITY)
         }
@@ -279,44 +276,20 @@ class PhotoActivity : AppCompatActivity() {
   }
 
   private fun applyExtensions(builder: ImageCaptureConfig.Builder) {
-    when (extensionFeature) {
-      BOKEH -> enableBokehFeature(builder)
-      HDR -> enableHdrFeature(builder)
-      NIGHT_MODE -> enableNightModeFeature(builder)
+    when (ExtensionFeature.fromPosition(extensionFeatures.selectedItemPosition)) {
+      ExtensionFeature.BOKEH -> enableExtensionFeature(BokehImageCaptureExtender.create(builder))
+      ExtensionFeature.HDR -> enableExtensionFeature(HdrImageCaptureExtender.create(builder))
+      ExtensionFeature.NIGHT_MODE -> enableExtensionFeature(NightImageCaptureExtender.create(builder))
       else -> {
       }
     }
   }
 
-  private fun enableBokehFeature(builder: ImageCaptureConfig.Builder) {
-    val bokehImageCapture = BokehImageCaptureExtender.create(builder)
-
-    if (bokehImageCapture.isExtensionAvailable) {
-      bokehImageCapture.enableExtension()
+  private fun enableExtensionFeature(imageCaptureExtender: ImageCaptureExtender) {
+    if (imageCaptureExtender.isExtensionAvailable) {
+      imageCaptureExtender.enableExtension()
     } else {
-      Toast.makeText(this, getString(R.string.bokeh_unavailable), Toast.LENGTH_SHORT).show()
-      extensionFeatures.setSelection(0)
-    }
-  }
-
-  private fun enableHdrFeature(builder: ImageCaptureConfig.Builder) {
-    val hdrImageCapture = HdrImageCaptureExtender.create(builder)
-
-    if (hdrImageCapture.isExtensionAvailable) {
-      hdrImageCapture.enableExtension()
-    } else {
-      Toast.makeText(this, getString(R.string.hdr_unavailable), Toast.LENGTH_SHORT).show()
-      extensionFeatures.setSelection(0)
-    }
-  }
-
-  private fun enableNightModeFeature(builder: ImageCaptureConfig.Builder) {
-    val nightModeImageCapture = NightImageCaptureExtender.create(builder)
-
-    if (nightModeImageCapture.isExtensionAvailable) {
-      nightModeImageCapture.enableExtension()
-    } else {
-      Toast.makeText(this, getString(R.string.night_mode_unavailable), Toast.LENGTH_SHORT).show()
+      Toast.makeText(this, getString(R.string.extension_unavailable), Toast.LENGTH_SHORT).show()
       extensionFeatures.setSelection(0)
     }
   }
@@ -324,7 +297,6 @@ class PhotoActivity : AppCompatActivity() {
   private fun updateTransform() {
     val matrix = Matrix()
 
-    // Compute the center of the view finder
     val centerX = previewView.width / 2f
     val centerY = previewView.height / 2f
 
