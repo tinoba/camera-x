@@ -37,7 +37,7 @@ class FileUtilsImpl : FileUtils {
   companion object {
 
     private const val IMAGE_PREFIX = "Image_"
-    private const val JAG_SUFFIX = ".jpg"
+    private const val JPG_SUFFIX = ".jpg"
     private const val FOLDER_NAME = "Photo_session"
   }
 
@@ -52,6 +52,6 @@ class FileUtilsImpl : FileUtils {
   override fun createFile() = File(
       Environment.getExternalStorageDirectory().toString() +
           File.separator + Environment.DIRECTORY_PICTURES + File.separator +
-          FOLDER_NAME + File.separator + IMAGE_PREFIX + System.currentTimeMillis() + JAG_SUFFIX
+          FOLDER_NAME + File.separator + IMAGE_PREFIX + System.currentTimeMillis() + JPG_SUFFIX
   )
 }

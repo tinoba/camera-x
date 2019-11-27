@@ -40,11 +40,23 @@ import android.media.Image
 import android.os.Bundle
 import android.raywenderlich.com.photosession.ImagePopupView.Companion.ALPHA_TRANSPARENT
 import android.raywenderlich.com.photosession.ImagePopupView.Companion.FADING_ANIMATION_DURATION
+import android.view.Surface
+import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.*
+import androidx.camera.extensions.BokehImageCaptureExtender
+import androidx.camera.extensions.HdrImageCaptureExtender
+import androidx.camera.extensions.ImageCaptureExtender
+import androidx.camera.extensions.NightImageCaptureExtender
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import kotlinx.android.synthetic.main.activity_photo.*
+import java.io.File
+import java.util.concurrent.Executors
 
 class PhotoActivity : AppCompatActivity() {
 
@@ -59,7 +71,10 @@ class PhotoActivity : AppCompatActivity() {
 
   private val fileUtils: FileUtils by lazy { FileUtilsImpl() }
 
+  private var imageCapture: ImageCapture? = null
+  private var imagePreview: Preview? = null
   private var imagePopupView: ImagePopupView? = null
+  private var lensFacing = CameraX.LensFacing.BACK
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -68,12 +83,184 @@ class PhotoActivity : AppCompatActivity() {
     requestPermissions()
   }
 
-  private fun setClickListeners() {
+  private fun startCamera() {
+    CameraX.unbindAll()
 
+    imagePreview = createPreviewUseCase()
+
+    imagePreview!!.setOnPreviewOutputUpdateListener {
+
+      val parent = previewView.parent as ViewGroup
+      parent.removeView(previewView)
+      parent.addView(previewView, 0)
+
+      previewView.surfaceTexture = it.surfaceTexture
+      updateTransform()
+    }
+
+    imageCapture = createCaptureUseCase()
+    CameraX.bindToLifecycle(this, imagePreview, imageCapture)
+  }
+
+  private fun takePicture() {
+    disableActions()
+    if (saveImageSwitch.isChecked) {
+      savePictureToFile()
+    } else {
+      savePictureToMemory()
+    }
+  }
+
+  private fun savePictureToFile() {
+    fileUtils.createDirectoryIfNotExist()
+    val file = fileUtils.createFile()
+
+    imageCapture?.takePicture(file, getMetadata(), Executors.newSingleThreadExecutor()
+        , object : ImageCapture.OnImageSavedListener {
+      override fun onImageSaved(file: File) {
+        runOnUiThread {
+          takenImage.setImageURI(
+              FileProvider.getUriForFile(this@PhotoActivity,
+                  packageName,
+                  file))
+          enableActions()
+        }
+      }
+
+      override fun onError(imageCaptureError: ImageCapture.ImageCaptureError,
+                           message: String,
+                           cause: Throwable?) {
+        Toast.makeText(this@PhotoActivity, getString(R.string.image_capture_failed), Toast.LENGTH_SHORT).show()
+      }
+    })
+  }
+
+  private fun savePictureToMemory() {
+    imageCapture?.takePicture(
+        Executors.newSingleThreadExecutor()
+        , object : ImageCapture.OnImageCapturedListener() {
+      override fun onError(
+          error: ImageCapture.ImageCaptureError,
+          message: String, exc: Throwable?
+      ) {
+        Toast.makeText(this@PhotoActivity, getString(R.string.image_save_failed), Toast.LENGTH_SHORT).show()
+      }
+
+      override fun onCaptureSuccess(imageProxy: ImageProxy?, rotationDegrees: Int) {
+        if (imageProxy != null && imageProxy.image != null) {
+          val bitmap = rotateImage(
+              imageToBitmap(imageProxy.image!!),
+              rotationDegrees.toFloat()
+          )
+          runOnUiThread {
+            takenImage.setImageBitmap(bitmap)
+            enableActions()
+          }
+        }
+        super.onCaptureSuccess(imageProxy, rotationDegrees)
+      }
+    })
+  }
+
+  private fun getMetadata() = ImageCapture.Metadata().apply {
+    isReversedHorizontal = lensFacing == CameraX.LensFacing.FRONT
+  }
+
+  private fun createPreviewUseCase(): Preview {
+    val previewConfig = PreviewConfig.Builder().apply {
+      setLensFacing(lensFacing)
+      setTargetRotation(previewView.display.rotation)
+
+    }.build()
+
+    return Preview(previewConfig)
+  }
+
+  private fun updateTransform() {
+    val matrix = Matrix()
+
+    val centerX = previewView.width / 2f
+    val centerY = previewView.height / 2f
+
+    val rotationDegrees = when (previewView.display.rotation) {
+      Surface.ROTATION_0 -> 0
+      Surface.ROTATION_90 -> 90
+      Surface.ROTATION_180 -> 180
+      Surface.ROTATION_270 -> 270
+      else -> return
+    }
+    matrix.postRotate(-rotationDegrees.toFloat(), centerX, centerY)
+
+    previewView.setTransform(matrix)
+  }
+
+  private fun toggleFrontBackCamera() {
+    lensFacing = if (lensFacing == CameraX.LensFacing.BACK) {
+      CameraX.LensFacing.FRONT
+    } else {
+      CameraX.LensFacing.BACK
+    }
+    previewView.post { startCamera() }
+  }
+
+  private fun createCaptureUseCase(): ImageCapture {
+    val imageCaptureConfig = ImageCaptureConfig.Builder()
+        .apply {
+          setLensFacing(lensFacing)
+          setTargetRotation(previewView.display.rotation)
+          setCaptureMode(ImageCapture.CaptureMode.MAX_QUALITY)
+        }
+
+    applyExtensions(imageCaptureConfig)
+    return ImageCapture(imageCaptureConfig.build())
+  }
+
+  private fun applyExtensions(builder: ImageCaptureConfig.Builder) {
+    when (ExtensionFeature.fromPosition(extensionFeatures.selectedItemPosition)) {
+      ExtensionFeature.BOKEH -> enableExtensionFeature(BokehImageCaptureExtender.create(builder))
+      ExtensionFeature.HDR -> enableExtensionFeature(HdrImageCaptureExtender.create(builder))
+      ExtensionFeature.NIGHT_MODE -> enableExtensionFeature(NightImageCaptureExtender.create(builder))
+      else -> {
+      }
+    }
+  }
+
+  private fun enableExtensionFeature(imageCaptureExtender: ImageCaptureExtender) {
+    if (imageCaptureExtender.isExtensionAvailable) {
+      imageCaptureExtender.enableExtension()
+    } else {
+      Toast.makeText(this, getString(R.string.extension_unavailable), Toast.LENGTH_SHORT).show()
+      extensionFeatures.setSelection(0)
+    }
+  }
+
+  private fun setClickListeners() {
+    toggleCameraLens.setOnClickListener { toggleFrontBackCamera() }
+    previewView.setOnClickListener { takePicture() }
+    takenImage.setOnLongClickListener {
+      showImagePopup()
+      return@setOnLongClickListener true
+    }
+
+    extensionFeatures.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+      override fun onItemSelected(
+          parentView: AdapterView<*>,
+          selectedItemView: View,
+          position: Int,
+          id: Long
+      ) {
+        if (ExtensionFeature.fromPosition(position) != ExtensionFeature.NONE) {
+          previewView.post { startCamera() }
+        }
+      }
+
+      override fun onNothingSelected(parentView: AdapterView<*>) {}
+    }
   }
 
   private fun requestPermissions() {
     if (allPermissionsGranted()) {
+      previewView.post { startCamera() }
     } else {
       ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
     }
@@ -153,7 +340,7 @@ class PhotoActivity : AppCompatActivity() {
   ) {
     if (requestCode == REQUEST_CODE_PERMISSIONS) {
       if (allPermissionsGranted()) {
-
+        previewView.post { startCamera() }
       } else {
         finish()
       }
