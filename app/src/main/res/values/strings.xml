@@ -6,9 +6,7 @@
   <string name="image_save_failed">Saving image failed</string>
   <string name="image_capture_failed">Image capture failed</string>
   <string name="extension_feature_prompt">Choose a feature</string>
-  <string name="bokeh_unavailable">Bokeh feature is not available on this device</string>
-  <string name="hdr_unavailable">HDR feature is not available on this device</string>
-  <string name="night_mode_unavailable">Night Mode feature is not available on this device</string>
+  <string name="extension_unavailable">The effect is not available on this device</string>
   <string name="toggle_camera_lens">toggle camera lens</string>
 
   <string-array name="extension_features">
